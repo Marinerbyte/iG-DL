@@ -1,4 +1,4 @@
-# app.py (FINAL-FINAL VERSION)
+# app.py (FINAL-FINAL-FINAL VERSION - Uses a file on disk)
 
 import os
 from flask import Flask, request, jsonify, send_from_directory
@@ -6,8 +6,32 @@ import yt_dlp
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 
-# Environment se Netscape cookie string lega
-NETSCAPE_COOKIES = os.environ.get("INSTA_COOKIES_TEXT")
+# Render par file save karne ke liye disk ka path
+DISK_PATH = "/etc/secrets"
+COOKIE_FILE_PATH = os.path.join(DISK_PATH, "cookies.txt")
+
+# Environment se aapki di hui Netscape cookies lega
+NETSCAPE_COOKIES_TEXT = os.environ.get("INSTA_COOKIES_TEXT")
+
+def create_cookie_file():
+    """Environment variable se text lekar disk par file banata hai."""
+    if not NETSCAPE_COOKIES_TEXT:
+        print("ERROR: INSTA_COOKIES_TEXT environment variable nahi mila.")
+        return False
+    
+    try:
+        # Disk par directory मौजूद है या नहीं, यह सुनिश्चित करें
+        if not os.path.exists(DISK_PATH):
+            os.makedirs(DISK_PATH)
+            
+        with open(COOKIE_FILE_PATH, 'w') as f:
+            f.write(NETSCAPE_COOKIES_TEXT)
+        
+        print(f"Cookie file successfully created on disk at: {COOKIE_FILE_PATH}")
+        return True
+    except Exception as e:
+        print(f"Disk par cookie file banane me error: {e}")
+        return False
 
 # --- API Routes ---
 @app.route('/')
@@ -18,7 +42,8 @@ def home():
 def get_download_link():
     url = request.json.get('url')
     if not url: return jsonify({'error': 'URL nahi mila'}), 400
-    if not NETSCAPE_COOKIES: return jsonify({'error': 'Instagram cookies load nahi hui'}), 500
+    if not os.path.exists(COOKIE_FILE_PATH):
+        return jsonify({'error': 'Instagram cookie file server par nahi hai.'}), 500
 
     is_story_request = not url.startswith('http') and ' ' not in url
     if is_story_request:
@@ -28,7 +53,8 @@ def get_download_link():
         ydl_opts = {
             'quiet': True,
             'format': 'best',
-            'cookiefile_string': NETSCAPE_COOKIES
+            # YEH LINE SABSE ZAROORI HAI: Hum file ka path de rahe hain
+            'cookiefile': COOKIE_FILE_PATH
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -39,13 +65,12 @@ def get_download_link():
                 'filename': f"{info.get('id', 'media')}.mp4"
             })
     except Exception as e:
+        print(f"Download me error: {e}")
         return jsonify({'error': 'URL process nahi kar paaye. Shayad private ya galat URL hai.'}), 500
 
 # --- Server Start ---
-if NETSCAPE_COOKIES:
-    print("Perfect cookies successfully loaded! Server is ready.")
-else:
-    print("ERROR: INSTA_COOKIES_TEXT environment variable nahi mila.")
+# Server start hote hi cookie file banayega
+create_cookie_file()
 
 if __name__ == '__main__':
     app.run(debug=True)
