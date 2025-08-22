@@ -1,4 +1,4 @@
-# app.py (THE ABSOLUTE FINAL VERSION)
+# app.py (THE ABSOLUTE FINAL GUARANTEED VERSION)
 
 import os
 from flask import Flask, request, jsonify, send_from_directory
@@ -6,8 +6,8 @@ import yt_dlp
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 
-# Render par file save karne ke liye sahi, writable path
-DISK_PATH = "/data/insta_session"
+# Render ka standard, writable path
+DISK_PATH = "/var/data"
 COOKIE_FILE_PATH = os.path.join(DISK_PATH, "cookies.txt")
 
 # Environment se aapki di hui Netscape cookies lega
@@ -20,10 +20,7 @@ def create_cookie_file():
         return False
     
     try:
-        # Disk par directory banayenge agar nahi hai toh
-        if not os.path.exists(DISK_PATH):
-            os.makedirs(DISK_PATH)
-            
+        # Hum maan ke chalenge ki Render ne /var/data folder bana diya hai
         with open(COOKIE_FILE_PATH, 'w') as f:
             f.write(NETSCAPE_COOKIES_TEXT)
         
@@ -53,7 +50,6 @@ def get_download_link():
         ydl_opts = {
             'quiet': True,
             'format': 'best',
-            # Hum file ka path de rahe hain
             'cookiefile': COOKIE_FILE_PATH
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
