@@ -1,4 +1,4 @@
-# app.py (FINAL VERSION - Uses Browser Cookies)
+# app.py (FINAL DEBUG VERSION)
 
 import os
 import json
@@ -7,27 +7,31 @@ import yt_dlp
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 
-# Environment se cookie JSON lega
 JSON_COOKIES = os.environ.get("INSTA_COOKIES")
 netscape_cookie_string = None
 
 def convert_cookies_to_netscape(json_string):
-    """Browser cookie JSON ko yt-dlp ke format me convert karega."""
+    """Browser cookie JSON ko yt-dlp ke format me convert karega (Improved)."""
     try:
         cookies = json.loads(json_string)
         lines = ["# Netscape HTTP Cookie File"]
         for cookie in cookies:
+            # Zaroori fields check karenge
+            if 'domain' not in cookie or 'name' not in cookie or 'value' not in cookie:
+                continue
+
             domain = cookie.get('domain', '')
-            host_only = str(cookie.get('hostOnly', 'FALSE')).upper()
+            # Agar domain . se shuru hota hai, toh subdomains ke liye hai
+            includes_subdomains = 'TRUE' if domain.startswith('.') else 'FALSE'
             path = cookie.get('path', '/')
-            secure = str(cookie.get('secure', 'FALSE')).upper()
+            secure = str(cookie.get('secure', False)).upper()
             # Expiration date ko integer me convert karenge
             expires = str(int(cookie.get('expirationDate', 0)))
             name = cookie.get('name', '')
-            value = cookie.get('value', '')
+            value = str(cookie.get('value', ''))
             
-            # Netscape format: domain<TAB>hostOnly<TAB>path<TAB>secure<TAB>expires<TAB>name<TAB>value
-            line = f"{domain}\t{host_only}\t{path}\t{secure}\t{expires}\t{name}\t{value}"
+            # Netscape format: domain<TAB>includes_subdomains<TAB>path<TAB>secure<TAB>expires<TAB>name<TAB>value
+            line = f"{domain}\t{includes_subdomains}\t{path}\t{secure}\t{expires}\t{name}\t{value}"
             lines.append(line)
         
         return "\n".join(lines)
@@ -46,10 +50,9 @@ def get_download_link():
     if not url: return jsonify({'error': 'URL nahi mila'}), 400
     if not netscape_cookie_string: return jsonify({'error': 'Instagram cookies load nahi hui'}), 500
 
-    # Story ke liye URL ko yt-dlp format me banayenge
     is_story_request = not url.startswith('http') and ' ' not in url
     if is_story_request:
-        url = f"instagram:stories:{url}"
+        url = f"https://www.instagram.com/stories/{url}/"
 
     try:
         ydl_opts = {
@@ -60,12 +63,8 @@ def get_download_link():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             
-            # Agar story hai toh pehla item nikalenge
-            if is_story_request:
-                if 'entries' in info and info['entries']:
-                    info = info['entries'][0]
-                else:
-                    return jsonify({'error': f'No stories found for user'}), 404
+            if 'entries' in info and info['entries']:
+                info = info['entries'][0]
 
             return jsonify({
                 'success': True,
@@ -81,6 +80,10 @@ if JSON_COOKIES:
     netscape_cookie_string = convert_cookies_to_netscape(JSON_COOKIES)
     if netscape_cookie_string:
         print("Browser cookies aasaani se load ho gayi hain! Server taiyaar hai.")
+        # DEBUG: Hum logs me check karenge ki format sahi hai ya nahi
+        print("--- Generated Netscape Cookies (for debugging) ---")
+        print(netscape_cookie_string)
+        print("-------------------------------------------------")
     else:
         print("ERROR: Browser cookies convert nahi ho paayi.")
 else:
