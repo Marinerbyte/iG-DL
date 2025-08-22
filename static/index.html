@@ -1,0 +1,327 @@
+<!-- static/index.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Singularity | Interface</title>
+    <meta name="description" content="A cinematic, next-generation interface for downloading web media.">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%238a2be2'/%3E%3Cstop offset='100%25' stop-color='%23ff007f'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='20' fill='url(%23g)'/%3E%3Cpath d='M50,30 L70,50 L50,70 L30,50 Z' fill='none' stroke='white' stroke-width='5' transform='rotate(45 50 50)'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --dark-bg: #03000a;
+            --glass-bg: rgba(10, 8, 20, 0.5);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --text-color: #f0f0f0;
+            --text-muted: #8c8c9c;
+            --accent-1: #8a2be2; /* BlueViolet */
+            --accent-2: #ff007f; /* Magenta */
+            --accent-3: #00c6ff; /* Cyan */
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        @keyframes letter-fade-in { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes scan-glow { 0%, 100% { right: 100%; left: -10%; } 50% { right: -10%; left: 100%; } }
+
+        body {
+            font-family: 'Inter', sans-serif; 
+            background-color: var(--dark-bg);
+            color: var(--text-color); 
+            height: 100vh;
+            display: grid;
+            place-items: center;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+        #particle-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
+        .main-container {
+            width: 100%;
+            max-width: 600px;
+            padding: 20px;
+            perspective: 1000px;
+        }
+        .downloader-card { 
+            background: var(--glass-bg);
+            backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 35px; 
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4);
+            transform-style: preserve-3d;
+            transition: transform 0.1s ease-out;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: letter-fade-in 1s ease-out 0.5s forwards;
+        }
+        .downloader-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            border-radius: 24px; border: 1px solid transparent;
+            background: linear-gradient(135deg, var(--accent-1), var(--accent-2)) border-box;
+            -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: destination-out; mask-composite: exclude;
+            opacity: 0.5; pointer-events: none;
+        }
+        
+        .header { text-align: center; margin-bottom: 30px; transform: translateZ(20px); }
+        .header h1 { font-size: 2.2rem; font-weight: 700; color: var(--text-color); display: flex; justify-content: center; gap: 2px;}
+        .header h1 span { display: inline-block; opacity: 0; animation: letter-fade-in 0.5s ease-out forwards; }
+        .header p { color: var(--text-muted); font-size: 1rem; margin-top: 8px; }
+        
+        .form-content { transition: opacity 0.5s, transform 0.5s; }
+        .downloader-card.state-ready .form-content,
+        .downloader-card.state-downloading .form-content { opacity: 0; transform: scale(0.95); pointer-events: none; }
+        
+        .tabs { display: flex; justify-content: center; margin-bottom: 25px; gap: 10px; }
+        .tab-item { 
+            background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-muted); 
+            padding: 8px 18px; border-radius: 20px; cursor: pointer; font-weight: 500; 
+            transition: all 0.3s; 
+        }
+        .tab-item:hover { color: var(--text-color); border-color: var(--accent-3); }
+        .tab-item.active { 
+            color: #fff; border-color: var(--accent-1);
+            background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+            box-shadow: 0 0 15px rgba(138, 43, 226, 0.5);
+        }
+        
+        #url-input-wrapper { position: relative; }
+        #url-input { 
+            width: 100%; padding: 14px; border-radius: 12px; 
+            border: 1px solid var(--border-color); background-color: rgba(0,0,0,0.2); 
+            color: var(--text-color); font-size: 1rem; transition: all 0.3s;
+        }
+        #url-input:focus { outline: none; border-color: var(--accent-3); box-shadow: 0 0 15px rgba(0, 198, 255, 0.3); }
+        #url-input.scanning::before {
+            content: ''; position: absolute; top: 0; bottom: 0;
+            background: linear-gradient(90deg, transparent, var(--accent-3), transparent);
+            width: 10%; animation: scan-glow 1s linear;
+        }
+
+        .ready-state-content, .progress-state-content {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            opacity: 0; transform: scale(1.05); pointer-events: none;
+            transition: opacity 0.5s, transform 0.5s;
+        }
+        .downloader-card.state-ready .ready-state-content,
+        .downloader-card.state-downloading .progress-state-content { opacity: 1; transform: scale(1); pointer-events: all; }
+        
+        .download-btn {
+            padding: 16px 30px; border: none; border-radius: 12px; 
+            background-image: linear-gradient(90deg, var(--accent-1), var(--accent-2), var(--accent-1));
+            background-size: 200%; color: #fff; font-size: 1.1rem; font-weight: 600; cursor: pointer; 
+            transition: all 0.3s; 
+        }
+        .download-btn:hover { background-position: 100%; box-shadow: 0 0 25px rgba(255, 0, 127, 0.5); }
+
+        .progress-bar-container { width: 80%; background: rgba(0,0,0,0.2); border-radius: 10px; height: 20px; border: 1px solid var(--border-color); overflow: hidden; }
+        .progress-bar { width: 0%; height: 100%; border-radius: 10px; background: linear-gradient(90deg, var(--accent-1), var(--accent-2)); transition: width 0.2s linear; }
+        #progress-text { margin-top: 15px; font-size: 1rem; color: var(--text-muted); }
+
+        #sound-toggle { position: fixed; top: 20px; right: 20px; cursor: pointer; width: 30px; height: 30px; z-index: 100; }
+
+        #notification {
+            position: fixed; bottom: -100px; left: 50%;
+            transform: translateX(-50%); padding: 12px 25px;
+            border-radius: 8px; background: var(--glass-bg); backdrop-filter: blur(10px);
+            border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            color: var(--text-color); z-index: 100; transition: bottom 0.5s ease-in-out;
+        }
+        #notification.show { bottom: 30px; }
+    </style>
+</head>
+<body>
+    <canvas id="particle-canvas"></canvas>
+    
+    <div class="main-container">
+        <div class="downloader-card" id="downloader-card">
+            <div class="header" data-tilt-z="20">
+                <h1></h1>
+                <p data-tilt-z="10">The ultimate media downloading experience.</p>
+            </div>
+            
+            <div class="form-content" data-tilt-z="30">
+                <div class="tabs">
+                    <button class="tab-item active" data-sound="tiny" data-placeholder="Paste Reel or Photo URL...">Reel/Photo</button>
+                </div>
+                <div id="url-input-wrapper">
+                    <input type="text" id="url-input" placeholder="Paste Reel or Photo URL..." autocomplete="off">
+                </div>
+            </div>
+
+            <div class="ready-state-content">
+                <p style="margin-bottom:20px; color:var(--text-muted);">Link detected. Ready to download.</p>
+                <button class="download-btn" id="start-download" data-sound="confirm">Start Download</button>
+            </div>
+
+            <div class="progress-state-content">
+                 <div class="progress-bar-container">
+                    <div class="progress-bar" id="progress-bar"></div>
+                 </div>
+                 <p id="progress-text">Initiating...</p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="notification"></div>
+    <div id="sound-toggle" data-sound="tiny">
+        <svg id="sound-on-icon" fill="var(--text-muted)" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"></path></svg>
+        <svg id="sound-off-icon" style="display:none;" fill="var(--text-muted)" viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"></path></svg>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const card = document.getElementById('downloader-card');
+            const urlInput = document.getElementById('url-input');
+            const startDownloadBtn = document.getElementById('start-download');
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            let uiState = 'idle';
+
+            function setUiState(newState) {
+                uiState = newState;
+                card.className = 'downloader-card';
+                if (newState !== 'idle') {
+                    card.classList.add(`state-${newState}`);
+                }
+            }
+
+            function showNotification(message) {
+                const notification = document.getElementById('notification');
+                notification.textContent = message;
+                notification.classList.add('show');
+                setTimeout(() => notification.classList.remove('show'), 4000);
+            }
+            
+            function resetUI() {
+                urlInput.value = '';
+                progressBar.style.width = '0%';
+                setUiState('idle');
+            }
+            
+            // --- ACTUAL DOWNLOAD LOGIC + UI ANIMATION ---
+            function startActualDownload() {
+                const urlToDownload = urlInput.value.trim();
+                if (!urlToDownload) {
+                    showNotification('Please enter a URL first.');
+                    return;
+                }
+
+                setUiState('downloading');
+                progressText.textContent = "Connecting to server...";
+                progressBar.style.width = '10%';
+                playSound('start');
+
+                fetch('/api/get_link', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: urlToDownload }),
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw new Error(err.error || 'Server error'); });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        progressText.textContent = "Link generated! Starting download...";
+                        
+                        const link = document.createElement('a');
+                        link.href = data.download_url;
+                        link.setAttribute('download', data.filename || 'download');
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+                        
+                        runCompletionAnimation();
+                    } else {
+                        throw new Error(data.error || 'Failed to get download link.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    progressText.textContent = `Error!`;
+                    showNotification(error.message);
+                    setTimeout(resetUI, 4000);
+                });
+            }
+
+            function runCompletionAnimation() {
+                let progress = 10;
+                const interval = setInterval(() => {
+                    progress += Math.random() * 15;
+                    if (progress >= 100) {
+                        progress = 100;
+                        clearInterval(interval);
+                        progressText.textContent = "Download Complete!";
+                        playSound('complete');
+                        setTimeout(resetUI, 2000);
+                    } else {
+                        if (progress > 75) progressText.textContent = "Finalizing...";
+                        else if (progress > 30) progressText.textContent = "Downloading...";
+                    }
+                    progressBar.style.width = `${progress}%`;
+                }, 150);
+            }
+
+            startDownloadBtn.addEventListener('click', startActualDownload);
+
+            // --- UI Interaction & Effects (Original code) ---
+            urlInput.addEventListener('input', () => {
+                if (urlInput.value.trim().startsWith('http')) {
+                    if (uiState === 'idle') {
+                        playSound('scan');
+                        setTimeout(() => setUiState('ready'), 500);
+                    }
+                } else if (uiState === 'ready') {
+                    setUiState('idle');
+                }
+            });
+
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const { width, height } = rect;
+                const rotateX = ((y / height) - 0.5) * -15;
+                const rotateY = ((x / width) - 0.5) * 15;
+                card.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+                card.querySelectorAll('[data-tilt-z]').forEach(el => {
+                    el.style.transform = `translateZ(${el.getAttribute('data-tilt-z')}px)`;
+                });
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = 'rotateX(0) rotateY(0)';
+                card.querySelectorAll('[data-tilt-z]').forEach(el => {
+                    el.style.transform = `translateZ(0)`;
+                });
+            });
+
+            const title = "Singularity";
+            const titleContainer = document.querySelector('.header h1');
+            title.split('').forEach((letter, i) => {
+                const span = document.createElement('span');
+                span.textContent = letter === ' ' ? '\u00A0' : letter;
+                span.style.animationDelay = `${0.5 + i * 0.05}s`;
+                titleContainer.appendChild(span);
+            });
+
+            // Sound Engine & Particles (No changes)
+            let isMuted = false;
+            const soundToggle = document.getElementById('sound-toggle');
+            const soundOnIcon = document.getElementById('sound-on-icon');
+            const soundOffIcon = document.getElementById('sound-off-icon');
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const sounds = { tiny: 'data:audio/wav;base64,UklGRkYAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQIAAACA//8BAA==', confirm: 'data:audio/wav;base64,UklGRlIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YRgAAAAg/39/f3+Af4B/gH9/f39/gH+AgH+AgH9/f39/gH+Af4B/f39/fw==', scan: 'data:audio/wav;base64,UklGRmwBAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVgBAACAgPz8/P7+/v39/vz8/f79/f3+/Pz9/f7+/v79/vz8/f79/vz8/f79/vz8/f79/f79/v79/v79/v7+/Pz9/vz8/f79/f79/Pz8/Pz9/v7+/f7+/f7+/v79/v79/v79/vz8/f79/Pz8/Pz8/Pz8/Pz8/Pz8/f79/f7+/v79/v7+/v79/v79/Pz9/Pz8/vz8/f79/f79/vz8/f79/vz8/vz9/vz8/vz8/Pz8/vz9/vz9/vz9/vz8/Pz8/vz8/vz8/vz8/v7+/f79/v7+/f7+/f7+/f79/v79/f79/vz8/f79/vz8/f79/Pz8/Pz9/f79/Pz9/Pz8/Pz9/f79/vz8/f79/vz8/vz8/vz8/vz8/Pz9/f79/vz8/vz8/vz8/Pz9/vz8/vz8/vz9/v7+/v79/v7+/f7+/v79/f79/f79/f79/v7+/f79/f79/vz8/v79/vz8/f79/vz8/v7+/v79/v79/f79/v7+/v7+/v7+/v7+/v7+/v7+/g==', start: 'data:audio/wav;base64,UklGRkgBAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YUABAAD+/vz8/Pz8/Pz8/Pz8/Pz9/f39/v7+/v7+/v7+/v7+/v7+/f39/f39/Pz8/Pz8/Pz8/Pz8/f39/f39/v7+/v7+/v7+/v7+/v7+/v7+/f39/f39/Pz8/vz8/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/g==', complete: 'data:audio/wav;base64,UklGRmYAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVIAAAAAgICA/3+AgP9/gID/f4CA/3+AgP9/gID/f4CA/3+AgP9/gID/f4CA/3+AgP9/gID/f4CA/3+AgP9/gID/f4CA/3+AgH9/gID/f4CAf39/gIB/f3+AgH9/f4CAf39/gIB/f3+AgH9/fw=='};
+            const audioBuffers = {};
+            Object.keys(sounds).forEach(key => { fetch(sounds[key]).then(res => res.arrayBuffer()).then(buffer => audioContext.decodeAudioData(buffer)).then(decoded => audioBuffers[key] = decoded); });
+            function playSound(id) { if (isMuted || !audioBuffers[id]) return; const source = audioContext.createBufferSource(); source.buffer = audioBuffers[id]; source.connect(audioContext.destination); source.start(0); }
+            document.querySelectorAll('[data-sound]').forEach(el => { el.addEventListener('click', () => playSound(el.dataset.sound)); el.addEventListener('mouseover', () => playSound('tiny')); });
+            soundToggle.addEventListener('click', () => { isMuted = !isMuted; soundOnIcon.style.display = isMuted ? 'none' : 'block'; soundOffIcon.style.display = isMuted ? 'block' : 'none'; });
+            const canvas = document.getElementById('particle-canvas'), ctx = canvas.getContext('2d'); canvas.width = window.innerWidth; canvas.height = window.innerHeight; let particlesArray; const mouse = { x: null, y: null, radius: (canvas.height/120) * (canvas.width/120) }; class Particle { constructor(x, y, dX, dY, size) { this.x = x; this.y = y; this.dX = dX; this.dY = dY; this.size = size; } draw() { ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fillStyle = 'rgba(138, 43, 226, 0.5)'; ctx.fill(); } update() { if (this.x > canvas.width || this.x < 0) this.dX = -this.dX; if (this.y > canvas.height || this.y < 0) this.dY = -this.dY; let dx = mouse.x - this.x, dy = mouse.y - this.y; if (Math.sqrt(dx*dx + dy*dy) < mouse.radius + this.size) { if (mouse.x < this.x && this.x < canvas.width - this.size * 10) this.x += 3; if (mouse.x > this.x && this.x > this.size * 10) this.x -= 3; if (mouse.y < this.y && this.y < canvas.height - this.size * 10) this.y += 3; if (mouse.y > this.y && this.y > this.size * 10) this.y -= 3; } this.x += this.dX; this.y += this.dY; this.draw(); } } function init() { particlesArray = []; let num = (canvas.height * canvas.width) / 9000; for (let i = 0; i < num; i++) { let size = (Math.random() * 1.5) + 1; let x = (Math.random() * ((innerWidth - size * 2) - (size * 2)) + size * 2); let y = (Math.random() * ((innerHeight - size * 2) - (size * 2)) + size * 2); let dX = (Math.random() * .4) - .2, dY = (Math.random() * .4) - .2; particlesArray.push(new Particle(x, y, dX,
