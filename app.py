@@ -30,16 +30,19 @@ def instagram_login():
         print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         return False
 
-    session_filename = os.path.join(SESSION_DIR, L.format_session_filename(INSTA_USERNAME))
+    # CORRECTED: Session file ka path seedhe username se banayenge
+    session_filename = os.path.join(SESSION_DIR, INSTA_USERNAME)
 
     try:
         print(f"Pehle se saved session '{session_filename}' se login karne ki koshish...")
+        # CORRECTED: Ab hum file ka poora path denge
         L.load_session_from_file(INSTA_USERNAME, session_filename)
         print("Session se login successful!")
     except FileNotFoundError:
         try:
             print("Session file nahi mili. Naya login kar raha hai...")
             L.login(INSTA_USERNAME, INSTA_PASSWORD)
+            # CORRECTED: File ko sahi path par save karenge
             L.save_session_to_file(session_filename)
             print("Naya login successful. Session save ho gaya.")
         except Exception as e:
@@ -106,9 +109,7 @@ def get_download_link():
         return jsonify({'error': f'URL process nahi kar paaye: Invalid URL or private content.'}), 500
 
 # --- Server Start ---
-# YEH LINE BADLI HAI: Isko 'if' block se bahar nikal diya hai
 instagram_login()
 
 if __name__ == '__main__':
-    # Yeh hissa ab sirf local computer par chalane ke liye hai
     app.run(debug=True, port=5000)
