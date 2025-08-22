@@ -1,60 +1,39 @@
+# app.py (FINAL VERSION - Uses Browser Cookies)
+
 import os
-import io
+import json
 from flask import Flask, request, jsonify, send_from_directory
 import yt_dlp
-import instaloader
-
-# Render par session file save karne ke liye ek fixed path
-SESSION_DIR = "/etc/secrets"
-if not os.path.exists(SESSION_DIR):
-    os.makedirs(SESSION_DIR)
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 
-L = instaloader.Instaloader(
-    download_pictures=False, download_videos=False, download_video_thumbnails=False,
-    download_geotags=False, download_comments=False, save_metadata=False,
-    compress_json=False
-)
+# Environment se cookie JSON lega
+JSON_COOKIES = os.environ.get("INSTA_COOKIES")
+netscape_cookie_string = None
 
-INSTA_USERNAME = os.environ.get("INSTA_USERNAME")
-INSTA_PASSWORD = os.environ.get("INSTA_PASSWORD")
-
-cookie_jar_string = None
-
-def instagram_login():
-    global cookie_jar_string
-    if not INSTA_USERNAME or not INSTA_PASSWORD:
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        print("!!! ERROR: INSTA_USERNAME aur INSTA_PASSWORD set nahi hai. !!!")
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        return False
-
-    # CORRECTED: Session file ka path seedhe username se banayenge
-    session_filename = os.path.join(SESSION_DIR, INSTA_USERNAME)
-
+def convert_cookies_to_netscape(json_string):
+    """Browser cookie JSON ko yt-dlp ke format me convert karega."""
     try:
-        print(f"Pehle se saved session '{session_filename}' se login karne ki koshish...")
-        # CORRECTED: Ab hum file ka poora path denge
-        L.load_session_from_file(INSTA_USERNAME, session_filename)
-        print("Session se login successful!")
-    except FileNotFoundError:
-        try:
-            print("Session file nahi mili. Naya login kar raha hai...")
-            L.login(INSTA_USERNAME, INSTA_PASSWORD)
-            # CORRECTED: File ko sahi path par save karenge
-            L.save_session_to_file(session_filename)
-            print("Naya login successful. Session save ho gaya.")
-        except Exception as e:
-            print(f"Bhai, login me error aa gaya: {e}")
-            return False
-
-    if os.path.exists(session_filename):
-        with open(session_filename, 'r') as f:
-            cookie_jar_string = f.read()
-            print("Cookies ko memory mein load kar liya hai. Ab sab set hai.")
-        return True
-    return False
+        cookies = json.loads(json_string)
+        lines = ["# Netscape HTTP Cookie File"]
+        for cookie in cookies:
+            domain = cookie.get('domain', '')
+            host_only = str(cookie.get('hostOnly', 'FALSE')).upper()
+            path = cookie.get('path', '/')
+            secure = str(cookie.get('secure', 'FALSE')).upper()
+            # Expiration date ko integer me convert karenge
+            expires = str(int(cookie.get('expirationDate', 0)))
+            name = cookie.get('name', '')
+            value = cookie.get('value', '')
+            
+            # Netscape format: domain<TAB>hostOnly<TAB>path<TAB>secure<TAB>expires<TAB>name<TAB>value
+            line = f"{domain}\t{host_only}\t{path}\t{secure}\t{expires}\t{name}\t{value}"
+            lines.append(line)
+        
+        return "\n".join(lines)
+    except Exception as e:
+        print(f"Cookie convert karne me error: {e}")
+        return None
 
 # --- API Routes ---
 @app.route('/')
@@ -64,52 +43,48 @@ def home():
 @app.route('/api/get_link', methods=['POST'])
 def get_download_link():
     url = request.json.get('url')
-    if not url:
-        return jsonify({'error': 'URL toh de de bhai'}), 400
+    if not url: return jsonify({'error': 'URL nahi mila'}), 400
+    if not netscape_cookie_string: return jsonify({'error': 'Instagram cookies load nahi hui'}), 500
 
-    if not cookie_jar_string:
-         return jsonify({'error': 'Instagram login nahi hua. Server logs check kar.'}), 500
-    
+    # Story ke liye URL ko yt-dlp format me banayenge
     is_story_request = not url.startswith('http') and ' ' not in url
+    if is_story_request:
+        url = f"instagram:stories:{url}"
 
     try:
-        if is_story_request:
-            username = url
-            print(f"Fetching stories for username: {username}")
-            profile = instaloader.Profile.from_username(L.context, username)
-            story_items = L.get_stories(userids=[profile.userid])
+        ydl_opts = {
+            'quiet': True,
+            'format': 'best',
+            'cookiefile_string': netscape_cookie_string
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
             
-            for story in story_items:
-                for item in story.get_items():
-                    return jsonify({
-                        'success': True,
-                        'download_url': item.video_url if item.is_video else item.url,
-                        'filename': f"{username}_story.mp4" if item.is_video else f"{username}_story.jpg"
-                    })
-            return jsonify({'error': f'No recent stories found for {username}'}), 404
-        else:
-            ydl_opts = {
-                'quiet': True,
-                'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-                'cookiefile_string': cookie_jar_string
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                download_url = info.get('url')
-                title = info.get('title', 'media_file').replace(" ", "_")
-                ext = 'mp4' if info.get('is_video', True) else 'jpg'
+            # Agar story hai toh pehla item nikalenge
+            if is_story_request:
+                if 'entries' in info and info['entries']:
+                    info = info['entries'][0]
+                else:
+                    return jsonify({'error': f'No stories found for user'}), 404
 
-                return jsonify({
-                    'success': True,
-                    'download_url': download_url,
-                    'filename': f"{title}.{ext}"
-                })
+            return jsonify({
+                'success': True,
+                'download_url': info['url'],
+                'filename': f"{info.get('id', 'media')}.mp4"
+            })
     except Exception as e:
         print(f"Download me error: {e}")
-        return jsonify({'error': f'URL process nahi kar paaye: Invalid URL or private content.'}), 500
+        return jsonify({'error': 'URL process nahi kar paaye. Shayad private ya galat URL hai.'}), 500
 
 # --- Server Start ---
-instagram_login()
+if JSON_COOKIES:
+    netscape_cookie_string = convert_cookies_to_netscape(JSON_COOKIES)
+    if netscape_cookie_string:
+        print("Browser cookies aasaani se load ho gayi hain! Server taiyaar hai.")
+    else:
+        print("ERROR: Browser cookies convert nahi ho paayi.")
+else:
+    print("ERROR: INSTA_COOKIES environment variable nahi mila.")
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=True)
