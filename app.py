@@ -25,7 +25,9 @@ cookie_jar_string = None
 def instagram_login():
     global cookie_jar_string
     if not INSTA_USERNAME or not INSTA_PASSWORD:
-        print("ERROR: INSTA_USERNAME aur INSTA_PASSWORD set nahi hai.")
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("!!! ERROR: INSTA_USERNAME aur INSTA_PASSWORD set nahi hai. !!!")
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         return False
 
     session_filename = os.path.join(SESSION_DIR, L.format_session_filename(INSTA_USERNAME))
@@ -65,32 +67,24 @@ def get_download_link():
     if not cookie_jar_string:
          return jsonify({'error': 'Instagram login nahi hua. Server logs check kar.'}), 500
     
-    # Check if it's a username for stories or a URL
     is_story_request = not url.startswith('http') and ' ' not in url
 
     try:
         if is_story_request:
-            # Story download logic
             username = url
             print(f"Fetching stories for username: {username}")
-            try:
-                profile = instaloader.Profile.from_username(L.context, username)
-                story_items = L.get_stories(userids=[profile.userid])
-                
-                # We will just get the first available story's link for simplicity
-                for story in story_items:
-                    for item in story.get_items():
-                        return jsonify({
-                            'success': True,
-                            'download_url': item.video_url if item.is_video else item.url,
-                            'filename': f"{username}_story.mp4" if item.is_video else f"{username}_story.jpg"
-                        })
-                return jsonify({'error': f'No recent stories found for {username}'}), 404
-            except Exception as e:
-                print(f"Story download me error: {e}")
-                return jsonify({'error': f"Could not fetch stories for '{username}'"}), 500
+            profile = instaloader.Profile.from_username(L.context, username)
+            story_items = L.get_stories(userids=[profile.userid])
+            
+            for story in story_items:
+                for item in story.get_items():
+                    return jsonify({
+                        'success': True,
+                        'download_url': item.video_url if item.is_video else item.url,
+                        'filename': f"{username}_story.mp4" if item.is_video else f"{username}_story.jpg"
+                    })
+            return jsonify({'error': f'No recent stories found for {username}'}), 404
         else:
-            # Reel/Photo download logic
             ydl_opts = {
                 'quiet': True,
                 'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
@@ -100,7 +94,7 @@ def get_download_link():
                 info = ydl.extract_info(url, download=False)
                 download_url = info.get('url')
                 title = info.get('title', 'media_file').replace(" ", "_")
-                ext = 'mp4' if info.get('is_video') else 'jpg'
+                ext = 'mp4' if info.get('is_video', True) else 'jpg'
 
                 return jsonify({
                     'success': True,
@@ -112,5 +106,9 @@ def get_download_link():
         return jsonify({'error': f'URL process nahi kar paaye: Invalid URL or private content.'}), 500
 
 # --- Server Start ---
+# YEH LINE BADLI HAI: Isko 'if' block se bahar nikal diya hai
+instagram_login()
+
 if __name__ == '__main__':
-    instagram_login()
+    # Yeh hissa ab sirf local computer par chalane ke liye hai
+    app.run(debug=True, port=5000)
